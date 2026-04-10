@@ -10,7 +10,11 @@ from datetime import date
 import pandas as pd
 from dotenv import load_dotenv
 
-from data_access.pg_connect import connect_postgres, is_pooler_supabase_environ
+from data_access.pg_connect import (
+    connect_postgres,
+    is_pooler_supabase_environ,
+    postgres_connection_cache_key,
+)
 from data_access.streamlit_env import (
     hydrate_secrets_into_environ,
     is_supabase_direct_db_url,
@@ -25,9 +29,9 @@ AU_TZ = "Australia/Melbourne"
 
 def get_db_connection():
     hydrate_secrets_into_environ()
-    db_url = os.environ.get("POSTGRES_DB_URL")
-    if not db_url:
+    if not postgres_connection_cache_key():
         return None
+    db_url = os.environ.get("POSTGRES_DB_URL") or ""
     try:
         return connect_postgres()
     except ValueError as e:

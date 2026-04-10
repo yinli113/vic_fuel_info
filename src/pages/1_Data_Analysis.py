@@ -89,7 +89,11 @@ st.caption(
 
 _health = analysis.get_db_connection()
 if not _health:
-    st.error("Database is not configured. Set `POSTGRES_DB_URL` in your environment.")
+    st.error(
+        "Database is not configured. In **Streamlit Secrets** (or `.env` locally), set either "
+        "`POSTGRES_DB_URL` **or** `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD`. "
+        "See `.env.example`."
+    )
     st.stop()
 _health.close()
 
