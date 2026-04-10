@@ -10,7 +10,7 @@ from datetime import date
 import pandas as pd
 from dotenv import load_dotenv
 
-from data_access.pg_connect import connect_from_database_url
+from data_access.pg_connect import connect_postgres, is_pooler_supabase_environ
 from data_access.streamlit_env import (
     hydrate_secrets_into_environ,
     is_supabase_direct_db_url,
@@ -29,7 +29,7 @@ def get_db_connection():
     if not db_url:
         return None
     try:
-        return connect_from_database_url(db_url)
+        return connect_postgres()
     except ValueError as e:
         try:
             import streamlit as st
@@ -40,13 +40,14 @@ def get_db_connection():
         return None
     except Exception as e:
         err = str(e).lower()
-        if "password authentication failed" in err and "pooler.supabase.com" in db_url.lower():
+        if "password authentication failed" in err and is_pooler_supabase_environ():
             try:
                 import streamlit as st
 
                 st.info(
                     "Use the **Database password** from Supabase → Project Settings → Database, "
-                    "then update Streamlit Secrets with a fresh **Session pooler** URI."
+                    "or set `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` in Secrets "
+                    "(plain password, no URL encoding)."
                 )
             except Exception:
                 pass

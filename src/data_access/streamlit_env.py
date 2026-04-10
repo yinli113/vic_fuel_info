@@ -50,6 +50,12 @@ def hydrate_secrets_into_environ() -> None:
         # (e.g. old direct db.* URL vs session pooler pooler.supabase.com).
         for key in (
             "POSTGRES_DB_URL",
+            "POSTGRES_HOST",
+            "POSTGRES_PORT",
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_DBNAME",
+            "POSTGRES_SSLMODE",
             "SERVO_SAVER_API_CONSUMER_ID",
             "GEMINI_API_KEY",
             "GOOGLE_API_KEY",

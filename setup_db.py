@@ -5,7 +5,7 @@ _SRC = os.path.join(os.path.dirname(__file__), "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from data_access.pg_connect import connect_from_database_url
+from data_access.pg_connect import connect_postgres, postgres_connection_cache_key
 
 # Load env manually
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -16,16 +16,17 @@ if os.path.exists(env_path):
                 key, val = line.strip().split('=', 1)
                 os.environ[key] = val
 
-db_url = os.environ.get("POSTGRES_DB_URL")
-if not db_url or "[YOUR-PASSWORD]" in db_url:
-    print("Error: Please replace [YOUR-PASSWORD] in .env with your actual password!")
+if not postgres_connection_cache_key():
+    print(
+        "Error: Set POSTGRES_DB_URL in .env, or POSTGRES_HOST + POSTGRES_USER + POSTGRES_PASSWORD."
+    )
     sys.exit(1)
 
 schema_path = os.path.join(os.path.dirname(__file__), 'src', 'data_access', 'schema.sql')
 
 try:
     print("Connecting to Supabase...")
-    conn = connect_from_database_url(db_url)
+    conn = connect_postgres()
     cursor = conn.cursor()
     
     print("Executing schema.sql...")

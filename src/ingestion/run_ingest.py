@@ -13,7 +13,7 @@ _SRC = os.path.join(_REPO_ROOT, "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from data_access.pg_connect import connect_from_database_url
+from data_access.pg_connect import connect_postgres, postgres_connection_cache_key
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,12 +30,14 @@ if os.path.exists(env_path):
                 os.environ[key] = val
 
 CONSUMER_ID = os.environ.get("SERVO_SAVER_API_CONSUMER_ID")
-DB_URL = os.environ.get("POSTGRES_DB_URL")
+
 
 def get_db_connection():
-    if not DB_URL:
-        raise ValueError("POSTGRES_DB_URL environment variable is not set")
-    return connect_from_database_url(DB_URL)
+    if not postgres_connection_cache_key():
+        raise ValueError(
+            "Database not configured: set POSTGRES_DB_URL or POSTGRES_HOST+POSTGRES_USER+POSTGRES_PASSWORD"
+        )
+    return connect_postgres()
 
 def fetch_fuel_data():
     if not CONSUMER_ID or CONSUMER_ID == "your_api_consumer_id_here":

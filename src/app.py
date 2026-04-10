@@ -9,7 +9,11 @@ from streamlit_folium import st_folium
 from dotenv import load_dotenv
 from streamlit_geolocation import streamlit_geolocation
 
-from data_access.pg_connect import connect_from_database_url
+from data_access.pg_connect import (
+    connect_postgres,
+    is_pooler_supabase_environ,
+    postgres_connection_cache_key,
+)
 from data_access.streamlit_env import (
     hydrate_secrets_into_environ,
     is_supabase_direct_db_url,
@@ -33,24 +37,26 @@ st.markdown("Plan your next fuel stop easily.")
 
 
 @st.cache_resource(ttl=300)
-def _cached_psycopg2_conn(db_url: str):
-    """Cache key includes db_url so pooler/direct changes take effect after secrets update."""
-    if not db_url:
+def _cached_psycopg2_conn(cache_key: str):
+    """Cache key includes URL or discrete host/user/password so secret updates apply."""
+    if not cache_key:
         return None
     try:
-        return connect_from_database_url(db_url)
+        return connect_postgres()
     except ValueError as e:
         st.error(str(e))
         return None
     except Exception as e:
         st.error(f"Database connection error: {e}")
         err = str(e).lower()
-        if "password authentication failed" in err and "pooler.supabase.com" in db_url.lower():
+        if "password authentication failed" in err and is_pooler_supabase_environ():
             st.info(
                 "Use the **Database password** from Supabase → Project Settings → Database "
-                "(not your Supabase login). After resetting it, paste the new **Session pooler** "
-                "URI from Connect into Streamlit Secrets."
+                "(not your Supabase login). You can set **separate** Streamlit Secrets "
+                "(`POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, …) so the password "
+                "does not need URL-encoding—see `.env.example`."
             )
+        db_url = os.environ.get("POSTGRES_DB_URL") or ""
         if is_supabase_direct_db_url(db_url) and looks_like_ipv6_routing_failure(e):
             streamlit_warn_supabase_direct_url()
         return None
@@ -58,8 +64,7 @@ def _cached_psycopg2_conn(db_url: str):
 
 def get_db_connection():
     hydrate_secrets_into_environ()
-    db_url = os.environ.get("POSTGRES_DB_URL") or ""
-    return _cached_psycopg2_conn(db_url)
+    return _cached_psycopg2_conn(postgres_connection_cache_key())
 
 def fetch_hybrid_prices(fuel_type):
     conn = get_db_connection()
