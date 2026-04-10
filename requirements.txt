@@ -1,0 +1,12 @@
+streamlit
+openai>=1.40.0
+google-genai>=1.0.0
+pandas
+psycopg2-binary
+requests
+geopy
+leafmap
+streamlit-folium
+python-dotenv
+streamlit-geolocation
+watchdog

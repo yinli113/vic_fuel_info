@@ -1,0 +1,32 @@
+name: Scheduled Fuel Data Ingestion
+
+on:
+  schedule:
+    # Twice daily (UTC). Official prices move slowly; adjust hours for Victoria-local preference.
+    - cron: '0 6,18 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  ingest-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests psycopg2-binary
+          
+      - name: Run ingestion script
+        env:
+          SERVO_SAVER_API_CONSUMER_ID: ${{ secrets.SERVO_SAVER_API_CONSUMER_ID }}
+          POSTGRES_DB_URL: ${{ secrets.POSTGRES_DB_URL }}
+        run: |
+          echo "Running data ingestion..."
+          python src/ingestion/run_ingest.py

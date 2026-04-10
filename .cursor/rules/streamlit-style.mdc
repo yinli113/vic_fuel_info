@@ -1,0 +1,16 @@
+---
+description: Mobile-first, simple components, fast page loads
+globs: src/pages/*, src/app.py
+alwaysApply: false
+---
+
+# Streamlit Style Rule
+
+## Intent
+Build a fast, accessible, and user-friendly interface that works perfectly on mobile devices where drivers are most likely to use it.
+
+## Guidelines
+- **Mobile-First**: Design layouts anticipating a vertical, narrow screen.
+- **Performance**: Optimize database queries and use Streamlit caching (`@st.cache_data`, `@st.cache_resource`) to ensure fast page loads.
+- **Simplicity**: Use basic Streamlit components (`st.map`, `st.line_chart`, `st.metric`) before reaching for complex custom HTML/JS.
+- **Clarity**: Keep the interface uncluttered. Highlight key actions (e.g., reporting a price) prominently.

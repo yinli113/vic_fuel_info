@@ -1,0 +1,17 @@
+---
+description: Keep source data immutable, preserve attribution, label inferred outage logic clearly
+globs: src/domain/*, src/data_access/*, src/ingestion/*
+alwaysApply: false
+---
+
+# Data Safety Rule
+
+## Intent
+Ensure the integrity of official data and clearly distinguish it from crowdsourced data.
+
+## Guidelines
+- **Immutability**: Raw official data from the Servo Saver API must remain unmodified. Store it exactly as received.
+- **Attribution**: Always attribute official data to the Service Victoria Fair Fuel Open Data API.
+- **Transparency**: Clearly label any data that is 24-hours delayed vs. real-time community reports.
+- **Inferred Logic**: If using heuristics to predict outages, explicitly mark these as predictions or community updates, not official facts.
+- **Validation**: Implement reasonable boundaries for community reports (e.g., rejecting obvious joke prices).

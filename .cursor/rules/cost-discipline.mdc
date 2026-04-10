@@ -1,0 +1,16 @@
+---
+description: Default to free/cheap managed services and defer infra complexity
+globs: *
+alwaysApply: true
+---
+
+# Cost Discipline Rule
+
+## Intent
+Maintain the project as a low-to-zero cost MVP during its initial phase.
+
+## Guidelines
+- Choose free tiers for hosting (Streamlit Cloud), database (Supabase/Neon Postgres), and compute (GitHub Actions).
+- Do not introduce paid services (e.g., Confluent Kafka, advanced Mapbox APIs, paid observability) unless absolutely required by scale.
+- Keep ingestion frequency within API rate limits and free-tier GitHub Action limits.
+- Favor simplicity and built-in tools (like Streamlit's native map) over complex paid alternatives.

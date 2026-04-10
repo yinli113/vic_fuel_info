@@ -1,0 +1,16 @@
+---
+description: Prioritize low-cost public-good MVP decisions
+globs: *
+alwaysApply: true
+---
+
+# Product Scope Rule
+
+## Intent
+Focus on building a lean, hybrid data MVP that serves Victorian drivers by combining official delayed data with real-time community reports.
+
+## Guidelines
+- Avoid heavy infrastructure (e.g. Kafka, background workers) unless user traffic and scale explicitly demand it.
+- Opt for direct-to-database writes for community reports.
+- Emphasize hyper-local, actionable features (e.g. route optimization, hourly suburb trends).
+- Ensure the app provides high value with minimal operational overhead.
