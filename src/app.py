@@ -189,7 +189,14 @@ with plan_col:
     loc_col1, loc_col2 = st.columns([1, 1])
     with loc_col1:
         st.markdown("**My location:**")
-        loc = streamlit_geolocation()
+        # streamlit_geolocation watches GPS continuously → reruns every update → screen flashing.
+        # Only mount the component when the user opts in.
+        use_live_gps = st.checkbox(
+            "Use device GPS",
+            value=False,
+            help="Uses browser location. Can refresh often; use manual address to avoid.",
+        )
+        loc = streamlit_geolocation() if use_live_gps else None
     with loc_col2:
         st.markdown("**Or type manually:**")
         current_location = st.text_input("Place or postcode (e.g. '3121'):")
@@ -319,8 +326,8 @@ with map_placeholder.container():
             popup_html = f"<b>{row['station_name']}</b><br>Price: {row['price']} ¢/L<br>Dist: {row['distance_km']:.1f} km<br>{row['address']}"
             m.add_marker(location=station_coords, popup=popup_html, tooltip=row['station_name'], icon=leafmap.folium.Icon(color="green", icon="gas-pump", prefix="fa"))
         
-        # st_folium avoids leafmap's to_streamlit() → deprecated st.components.v1.html
-        st_folium(m, height=500, width=None)
+        # returned_objects=[] avoids a rerun on every pan/zoom/click (reduces flashing).
+        st_folium(m, height=500, width=None, returned_objects=[], key="fuel_plan_map")
         
         st.markdown("---")
         st.subheader("📊 State-wide Fuel Trends")

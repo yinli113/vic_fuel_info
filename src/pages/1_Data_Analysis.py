@@ -125,7 +125,7 @@ if geo_snap.empty:
         "No station coordinates for this selection and date yet. Run ingestion to build history."
     )
     m = folium.Map(location=[-37.8136, 144.9631], zoom_start=7, tiles="CartoDB positron")
-    st_folium(m, height=420, width=None)
+    st_folium(m, height=420, width=None, returned_objects=[], key="da_map_empty")
 else:
     center_lat = float(geo_snap["latitude"].median())
     center_lon = float(geo_snap["longitude"].median())
@@ -161,7 +161,7 @@ else:
                 heat_data.append([float(r.latitude), float(r.longitude), w])
             HeatMap(heat_data, radius=14, blur=16, min_opacity=0.2, max_zoom=12).add_to(m)
 
-    st_folium(m, height=420, width=None)
+    st_folium(m, height=420, width=None, returned_objects=[], key="da_map_heat")
 
 # Folium’s HeatMap uses a blue → cyan → lime → yellow → red ramp (Leaflet.heat defaults).
 _GRADIENT_BAR = (
