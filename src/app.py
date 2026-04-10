@@ -145,16 +145,51 @@ def fetch_current_day_averages():
     except Exception as e:
         return pd.DataFrame()
 
-# Fallback function to automatically find location based on IP address immediately on load
-@st.cache_data(ttl=3600)
-def get_ip_location():
+def _viewer_ip_for_geo() -> str | None:
+    """Client IP from the browser session (not the app server's egress)."""
     try:
-        res = requests.get('http://ip-api.com/json/', timeout=3).json()
-        if res and res.get('status') == 'success':
-            return (res.get('lat'), res.get('lon'))
-    except:
+        ctx = st.context
+    except Exception:
+        return None
+    try:
+        ip = getattr(ctx, "ip_address", None)
+        if ip:
+            s = str(ip).strip()
+            if s and s not in ("127.0.0.1", "::1"):
+                return s
+    except Exception:
         pass
-    return (-37.8136, 144.9631) # Default to Melbourne CBD if IP check fails
+    try:
+        headers = getattr(ctx, "headers", None)
+        if not headers:
+            return None
+        get = headers.get if hasattr(headers, "get") else dict(headers).get
+        xff = get("X-Forwarded-For") or get("x-forwarded-for")
+        if xff:
+            first = str(xff).split(",")[0].strip()
+            if first:
+                return first
+    except Exception:
+        pass
+    return None
+
+
+# Geolocate the *viewer's* IP (cached per IP). Never call ip-api with no IP on Cloud — that
+# returns the host/datacentre (e.g. Oregon), not the user.
+@st.cache_data(ttl=3600)
+def get_ip_location(client_ip: str | None) -> tuple[float, float]:
+    melbourne = (-37.8136, 144.9631)
+    if not client_ip:
+        return melbourne
+    try:
+        res = requests.get(f"http://ip-api.com/json/{client_ip}", timeout=3).json()
+        if res and res.get("status") == "success":
+            lat, lon = res.get("lat"), res.get("lon")
+            if lat is not None and lon is not None:
+                return (float(lat), float(lon))
+    except Exception:
+        pass
+    return melbourne
 
 fuel_types = {
     "Unleaded 91": "U91",
@@ -183,8 +218,9 @@ with plan_col:
 
     st.subheader("2. Where are you?")
     
-    # Check if we should auto-locate based on IP first
-    default_coords = get_ip_location()
+    viewer_ip = _viewer_ip_for_geo()
+    # Approximate location from viewer IP when Streamlit exposes it; else Melbourne (Vic default).
+    default_coords = get_ip_location(viewer_ip)
     
     loc_col1, loc_col2 = st.columns([1, 1])
     with loc_col1:
@@ -222,6 +258,11 @@ with plan_col:
         coords = default_coords
         location_display = "Your Approximate Location (Auto)"
         user_address = get_address_from_coords(coords[0], coords[1])
+        if viewer_ip is None:
+            st.caption(
+                "No viewer IP from this session — map centres on **Melbourne**. "
+                "Type a suburb or postcode for Victoria."
+            )
 
     # Fetch and filter data
     df_nearby = pd.DataFrame()
