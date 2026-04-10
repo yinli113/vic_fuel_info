@@ -6,17 +6,6 @@ import os
 from urllib.parse import urlparse
 
 
-def supabase_pooler_url_uses_plain_postgres_user(db_url: str | None) -> bool:
-    """Supabase session pooler expects user `postgres.<project_ref>`; `postgres` alone fails auth."""
-    if not db_url or "pooler.supabase.com" not in db_url.lower():
-        return False
-    try:
-        user = urlparse(db_url).username or ""
-    except Exception:
-        return False
-    return user == "postgres"
-
-
 def is_supabase_direct_db_url(db_url: str | None) -> bool:
     """True if URL targets db.*.supabase.co (IPv6 on direct; often fails on Streamlit Cloud)."""
     if not db_url or not isinstance(db_url, str):
@@ -35,21 +24,6 @@ def looks_like_ipv6_routing_failure(exc: BaseException) -> bool:
         or "network is unreachable" in msg
         or "no route to host" in msg
     )
-
-
-def streamlit_warn_supabase_pooler_username() -> None:
-    try:
-        import streamlit as st
-
-        st.error(
-            "`POSTGRES_DB_URL` uses the pooler host but database user **`postgres`** only. "
-            "Supabase **session pooler** requires **`postgres.<your-project-ref>`** as the username "
-            "(exactly as in Project Settings → Database → Session pooler). "
-            "Plain `postgresql://postgres:...@pooler...` triggers "
-            '"password authentication failed for user `postgres`".'
-        )
-    except Exception:
-        pass
 
 
 def streamlit_warn_supabase_direct_url() -> None:

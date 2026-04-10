@@ -16,8 +16,6 @@ from data_access.streamlit_env import (
     is_supabase_direct_db_url,
     looks_like_ipv6_routing_failure,
     streamlit_warn_supabase_direct_url,
-    streamlit_warn_supabase_pooler_username,
-    supabase_pooler_url_uses_plain_postgres_user,
 )
 
 load_dotenv()
@@ -30,12 +28,28 @@ def get_db_connection():
     db_url = os.environ.get("POSTGRES_DB_URL")
     if not db_url:
         return None
-    if supabase_pooler_url_uses_plain_postgres_user(db_url):
-        streamlit_warn_supabase_pooler_username()
-        return None
     try:
         return connect_from_database_url(db_url)
+    except ValueError as e:
+        try:
+            import streamlit as st
+
+            st.error(str(e))
+        except Exception:
+            pass
+        return None
     except Exception as e:
+        err = str(e).lower()
+        if "password authentication failed" in err and "pooler.supabase.com" in db_url.lower():
+            try:
+                import streamlit as st
+
+                st.info(
+                    "Use the **Database password** from Supabase → Project Settings → Database, "
+                    "then update Streamlit Secrets with a fresh **Session pooler** URI."
+                )
+            except Exception:
+                pass
         if is_supabase_direct_db_url(db_url) and looks_like_ipv6_routing_failure(e):
             streamlit_warn_supabase_direct_url()
         return None

@@ -15,8 +15,6 @@ from data_access.streamlit_env import (
     is_supabase_direct_db_url,
     looks_like_ipv6_routing_failure,
     streamlit_warn_supabase_direct_url,
-    streamlit_warn_supabase_pooler_username,
-    supabase_pooler_url_uses_plain_postgres_user,
 )
 
 # Load environment variables from .env file
@@ -41,8 +39,18 @@ def _cached_psycopg2_conn(db_url: str):
         return None
     try:
         return connect_from_database_url(db_url)
+    except ValueError as e:
+        st.error(str(e))
+        return None
     except Exception as e:
         st.error(f"Database connection error: {e}")
+        err = str(e).lower()
+        if "password authentication failed" in err and "pooler.supabase.com" in db_url.lower():
+            st.info(
+                "Use the **Database password** from Supabase → Project Settings → Database "
+                "(not your Supabase login). After resetting it, paste the new **Session pooler** "
+                "URI from Connect into Streamlit Secrets."
+            )
         if is_supabase_direct_db_url(db_url) and looks_like_ipv6_routing_failure(e):
             streamlit_warn_supabase_direct_url()
         return None
@@ -51,9 +59,6 @@ def _cached_psycopg2_conn(db_url: str):
 def get_db_connection():
     hydrate_secrets_into_environ()
     db_url = os.environ.get("POSTGRES_DB_URL") or ""
-    if supabase_pooler_url_uses_plain_postgres_user(db_url):
-        streamlit_warn_supabase_pooler_username()
-        return None
     return _cached_psycopg2_conn(db_url)
 
 def fetch_hybrid_prices(fuel_type):
