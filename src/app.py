@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import psycopg2
 import os
 import requests
 from geopy.geocoders import Nominatim
@@ -10,7 +9,15 @@ from streamlit_folium import st_folium
 from dotenv import load_dotenv
 from streamlit_geolocation import streamlit_geolocation
 
-from data_access.streamlit_env import hydrate_secrets_into_environ
+from data_access.pg_connect import connect_from_database_url
+from data_access.streamlit_env import (
+    hydrate_secrets_into_environ,
+    is_supabase_direct_db_url,
+    looks_like_ipv6_routing_failure,
+    streamlit_warn_supabase_direct_url,
+    streamlit_warn_supabase_pooler_username,
+    supabase_pooler_url_uses_plain_postgres_user,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,16 +33,28 @@ st.set_page_config(
 st.title("⛽ Fuel Up Plan")
 st.markdown("Plan your next fuel stop easily.")
 
+
 @st.cache_resource(ttl=300)
+def _cached_psycopg2_conn(db_url: str):
+    """Cache key includes db_url so pooler/direct changes take effect after secrets update."""
+    if not db_url:
+        return None
+    try:
+        return connect_from_database_url(db_url)
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        if is_supabase_direct_db_url(db_url) and looks_like_ipv6_routing_failure(e):
+            streamlit_warn_supabase_direct_url()
+        return None
+
+
 def get_db_connection():
-    db_url = os.environ.get("POSTGRES_DB_URL")
-    if db_url:
-        try:
-            return psycopg2.connect(db_url)
-        except Exception as e:
-            st.error(f"Database connection error: {e}")
-            return None
-    return None
+    hydrate_secrets_into_environ()
+    db_url = os.environ.get("POSTGRES_DB_URL") or ""
+    if supabase_pooler_url_uses_plain_postgres_user(db_url):
+        streamlit_warn_supabase_pooler_username()
+        return None
+    return _cached_psycopg2_conn(db_url)
 
 def fetch_hybrid_prices(fuel_type):
     conn = get_db_connection()
@@ -290,8 +309,8 @@ with map_placeholder.container():
             popup_html = f"<b>{row['station_name']}</b><br>Price: {row['price']} ¢/L<br>Dist: {row['distance_km']:.1f} km<br>{row['address']}"
             m.add_marker(location=station_coords, popup=popup_html, tooltip=row['station_name'], icon=leafmap.folium.Icon(color="green", icon="gas-pump", prefix="fa"))
         
-        # Render the large single map!
-        m.to_streamlit(height=500)
+        # st_folium avoids leafmap's to_streamlit() → deprecated st.components.v1.html
+        st_folium(m, height=500, use_container_width=True)
         
         st.markdown("---")
         st.subheader("📊 State-wide Fuel Trends")

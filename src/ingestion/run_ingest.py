@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import uuid
 import logging
@@ -6,6 +7,13 @@ import requests
 import psycopg2
 from psycopg2.extras import execute_values
 from datetime import datetime
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_SRC = os.path.join(_REPO_ROOT, "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
+from data_access.pg_connect import connect_from_database_url
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -27,7 +35,7 @@ DB_URL = os.environ.get("POSTGRES_DB_URL")
 def get_db_connection():
     if not DB_URL:
         raise ValueError("POSTGRES_DB_URL environment variable is not set")
-    return psycopg2.connect(DB_URL)
+    return connect_from_database_url(DB_URL)
 
 def fetch_fuel_data():
     if not CONSUMER_ID or CONSUMER_ID == "your_api_consumer_id_here":

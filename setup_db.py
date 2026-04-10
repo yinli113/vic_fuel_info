@@ -1,6 +1,11 @@
 import os
-import psycopg2
 import sys
+
+_SRC = os.path.join(os.path.dirname(__file__), "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
+from data_access.pg_connect import connect_from_database_url
 
 # Load env manually
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -20,7 +25,7 @@ schema_path = os.path.join(os.path.dirname(__file__), 'src', 'data_access', 'sch
 
 try:
     print("Connecting to Supabase...")
-    conn = psycopg2.connect(db_url)
+    conn = connect_from_database_url(db_url)
     cursor = conn.cursor()
     
     print("Executing schema.sql...")

@@ -8,8 +8,17 @@ import os
 from datetime import date
 
 import pandas as pd
-import psycopg2
 from dotenv import load_dotenv
+
+from data_access.pg_connect import connect_from_database_url
+from data_access.streamlit_env import (
+    hydrate_secrets_into_environ,
+    is_supabase_direct_db_url,
+    looks_like_ipv6_routing_failure,
+    streamlit_warn_supabase_direct_url,
+    streamlit_warn_supabase_pooler_username,
+    supabase_pooler_url_uses_plain_postgres_user,
+)
 
 load_dotenv()
 
@@ -17,10 +26,19 @@ AU_TZ = "Australia/Melbourne"
 
 
 def get_db_connection():
+    hydrate_secrets_into_environ()
     db_url = os.environ.get("POSTGRES_DB_URL")
     if not db_url:
         return None
-    return psycopg2.connect(db_url)
+    if supabase_pooler_url_uses_plain_postgres_user(db_url):
+        streamlit_warn_supabase_pooler_username()
+        return None
+    try:
+        return connect_from_database_url(db_url)
+    except Exception as e:
+        if is_supabase_direct_db_url(db_url) and looks_like_ipv6_routing_failure(e):
+            streamlit_warn_supabase_direct_url()
+        return None
 
 
 def fetch_max_ingest_date(conn) -> date | None:
