@@ -320,7 +320,7 @@ with map_placeholder.container():
             m.add_marker(location=station_coords, popup=popup_html, tooltip=row['station_name'], icon=leafmap.folium.Icon(color="green", icon="gas-pump", prefix="fa"))
         
         # st_folium avoids leafmap's to_streamlit() → deprecated st.components.v1.html
-        st_folium(m, height=500, use_container_width=True)
+        st_folium(m, height=500, width=None)
         
         st.markdown("---")
         st.subheader("📊 State-wide Fuel Trends")
@@ -332,7 +332,11 @@ with map_placeholder.container():
             avg_df = fetch_current_day_averages()
             if not avg_df.empty:
                 avg_df['avg_price'] = avg_df['avg_price'].round(1)
-                st.dataframe(avg_df.rename(columns={'fuel_type': 'Fuel Type', 'avg_price': 'Average ¢/L'}), hide_index=True, use_container_width=True)
+                st.dataframe(
+                    avg_df.rename(columns={'fuel_type': 'Fuel Type', 'avg_price': 'Average ¢/L'}),
+                    hide_index=True,
+                    width="stretch",
+                )
             else:
                 st.info("No average data available.")
                 

@@ -125,7 +125,7 @@ if geo_snap.empty:
         "No station coordinates for this selection and date yet. Run ingestion to build history."
     )
     m = folium.Map(location=[-37.8136, 144.9631], zoom_start=7, tiles="CartoDB positron")
-    st_folium(m, height=420, use_container_width=True)
+    st_folium(m, height=420, width=None)
 else:
     center_lat = float(geo_snap["latitude"].median())
     center_lon = float(geo_snap["longitude"].median())
@@ -161,7 +161,7 @@ else:
                 heat_data.append([float(r.latitude), float(r.longitude), w])
             HeatMap(heat_data, radius=14, blur=16, min_opacity=0.2, max_zoom=12).add_to(m)
 
-    st_folium(m, height=420, use_container_width=True)
+    st_folium(m, height=420, width=None)
 
 # Folium’s HeatMap uses a blue → cyan → lime → yellow → red ramp (Leaflet.heat defaults).
 _GRADIENT_BAR = (
@@ -301,7 +301,7 @@ with snap_brand_col:
                 )
                 .properties(height=min(420, max(160, 22 * int(len(brand_stats)))))
             )
-            st.altair_chart(bchart, use_container_width=True)
+            st.altair_chart(bchart, width="stretch")
             st.caption("Brands with fewer than two priced stations are hidden.")
 
 st.divider()
@@ -359,10 +359,10 @@ else:
             )
             layers.append(outage_line)
         if len(layers) == 1:
-            st.altair_chart(price_line.properties(height=320), use_container_width=True)
+            st.altair_chart(price_line.properties(height=320), width="stretch")
         else:
             dual_chart = alt.layer(*layers).resolve_scale(y="independent").properties(height=320)
-            st.altair_chart(dual_chart, use_container_width=True)
+            st.altair_chart(dual_chart, width="stretch")
         st.caption(
             "Blue: mean ¢/L over available, priced stations. Red (dashed): share of stations with a known flag marked unavailable. "
             "The two vertical scales are independent."
