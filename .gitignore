@@ -17,6 +17,9 @@ ENV/
 # Streamlit local secrets (if used)
 .streamlit/secrets.toml
 
+# Local screenshots / marketing assets (add to repo only if you intend to version them)
+/images/
+
 # OS / editor
 .DS_Store
 .idea/
