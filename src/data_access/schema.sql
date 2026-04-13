@@ -44,7 +44,10 @@ CREATE INDEX IF NOT EXISTS idx_user_reports_station_fuel ON user_reports (statio
 -- 4. Materialized View / View for Hybrid Current Prices
 -- Merges official data and community data, taking the most recent one.
 CREATE OR REPLACE VIEW mart_hybrid_current_prices AS
-WITH latest_official AS (
+WITH -- Prefer the most recently *ingested* row per station/fuel so the main app matches fresh
+-- snapshots even when the API leaves `updated_at` unchanged for days. Data Analysis already
+-- keys off ingested_at; this aligns the Fuel Up Plan mart with that behaviour.
+latest_official AS (
     SELECT DISTINCT ON (station_id, fuel_type)
         station_id,
         fuel_type,
@@ -53,7 +56,7 @@ WITH latest_official AS (
         updated_at AS source_updated_at,
         'official' AS data_source
     FROM raw_prices
-    ORDER BY station_id, fuel_type, updated_at DESC
+    ORDER BY station_id, fuel_type, ingested_at DESC, updated_at DESC
 ),
 latest_community AS (
     SELECT DISTINCT ON (station_id, fuel_type)

@@ -115,11 +115,16 @@ def fetch_7_day_price_history():
     if not conn:
         return pd.DataFrame()
     
+    # Group by ingest calendar day (Melbourne) so the chart moves with ingestion, not stale API updated_at.
     query = """
-        SELECT DATE(updated_at) as date, fuel_type, AVG(price) as avg_price
+        SELECT
+            (ingested_at AT TIME ZONE 'Australia/Melbourne')::date AS date,
+            fuel_type,
+            AVG(price) AS avg_price
         FROM raw_prices
-        WHERE updated_at >= CURRENT_DATE - INTERVAL '7 days'
-        GROUP BY DATE(updated_at), fuel_type
+        WHERE (ingested_at AT TIME ZONE 'Australia/Melbourne')::date >=
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Australia/Melbourne')::date - INTERVAL '7 days'
+        GROUP BY 1, fuel_type
         ORDER BY date ASC
     """
     try:
@@ -390,6 +395,9 @@ with map_placeholder.container():
                 
         with trend_col2:
             st.markdown("**7-Day Price History**")
+            st.caption(
+                "By **ingest day** (Melbourne time)—same idea as Data Analysis—not the API’s per-station `updated_at`."
+            )
             hist_df = fetch_7_day_price_history()
             if not hist_df.empty:
                 chart_data = hist_df.pivot(index='date', columns='fuel_type', values='avg_price')
