@@ -1,6 +1,7 @@
--- Run once on existing databases (e.g. Supabase SQL editor) if the Fuel Up Plan page
--- looked “stuck” on an old API updated_at while Data Analysis showed new ingest days.
--- Replaces view: mart_hybrid_current_prices — official branch now orders by ingested_at DESC.
+-- Re-run anytime in Supabase SQL (or psql). Replaces mart_hybrid_current_prices:
+-- 1) Official row per station/fuel = latest ingested_at (then API updated_at).
+-- 2) Official vs community = latest sort_ts (ingested_at for official, reported_at for community),
+--    not API updated_at (which can lag days behind ingest).
 
 CREATE OR REPLACE VIEW mart_hybrid_current_prices AS
 WITH latest_official AS (
@@ -10,6 +11,7 @@ WITH latest_official AS (
         price,
         is_available,
         updated_at AS source_updated_at,
+        ingested_at AS sort_ts,
         'official' AS data_source
     FROM raw_prices
     ORDER BY station_id, fuel_type, ingested_at DESC, updated_at DESC
@@ -21,6 +23,7 @@ latest_community AS (
         reported_price AS price,
         is_available,
         reported_at AS source_updated_at,
+        reported_at AS sort_ts,
         'community' AS data_source
     FROM user_reports
     ORDER BY station_id, fuel_type, reported_at DESC
@@ -39,7 +42,7 @@ ranked_combined AS (
         source_updated_at,
         data_source
     FROM combined
-    ORDER BY station_id, fuel_type, source_updated_at DESC
+    ORDER BY station_id, fuel_type, sort_ts DESC
 )
 SELECT
     r.station_id,

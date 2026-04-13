@@ -54,6 +54,7 @@ latest_official AS (
         price,
         is_available,
         updated_at AS source_updated_at,
+        ingested_at AS sort_ts,
         'official' AS data_source
     FROM raw_prices
     ORDER BY station_id, fuel_type, ingested_at DESC, updated_at DESC
@@ -65,6 +66,7 @@ latest_community AS (
         reported_price AS price,
         is_available,
         reported_at AS source_updated_at,
+        reported_at AS sort_ts,
         'community' AS data_source
     FROM user_reports
     ORDER BY station_id, fuel_type, reported_at DESC
@@ -74,6 +76,7 @@ combined AS (
     UNION ALL
     SELECT * FROM latest_community
 ),
+-- Tie-break official vs community by *recency of our data* (ingest / report time), not API updated_at.
 ranked_combined AS (
     SELECT DISTINCT ON (station_id, fuel_type)
         station_id,
@@ -83,7 +86,7 @@ ranked_combined AS (
         source_updated_at,
         data_source
     FROM combined
-    ORDER BY station_id, fuel_type, source_updated_at DESC
+    ORDER BY station_id, fuel_type, sort_ts DESC
 )
 SELECT 
     r.station_id,
