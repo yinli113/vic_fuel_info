@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS raw_prices (
 
 -- Index for querying latest prices quickly
 CREATE INDEX IF NOT EXISTS idx_raw_prices_station_fuel ON raw_prices (station_id, fuel_type, updated_at DESC);
+-- Supports mart DISTINCT ON ordered by ingest then API updated_at
+CREATE INDEX IF NOT EXISTS idx_raw_prices_mart_latest_official ON raw_prices (station_id, fuel_type, ingested_at DESC, updated_at DESC);
 
 -- 3. User Reports Table (Real-time Community Data)
 CREATE TABLE IF NOT EXISTS user_reports (

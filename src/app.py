@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from datetime import timedelta
 import requests
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
@@ -14,6 +15,7 @@ from data_access.pg_connect import (
     is_pooler_supabase_environ,
     postgres_connection_cache_key,
 )
+from data_access.analysis import melbourne_today
 from data_access.streamlit_env import (
     hydrate_secrets_into_environ,
     is_supabase_direct_db_url,
@@ -25,6 +27,19 @@ from data_access.streamlit_env import (
 load_dotenv()
 hydrate_secrets_into_environ()
 
+
+def _auto_refresh_interval():
+    """How often Fuel Up Plan re-fetches DB-backed UI; None disables. `STREAMLIT_AUTO_REFRESH_SECONDS` (e.g. 180)."""
+    raw = (os.environ.get("STREAMLIT_AUTO_REFRESH_SECONDS") or "300").strip().lower()
+    if raw in ("0", "false", "off", "no"):
+        return None
+    try:
+        sec = int(raw)
+    except ValueError:
+        sec = 300
+    return timedelta(seconds=max(30, sec))
+
+
 st.set_page_config(
     page_title="Fuel Up Plan",
     page_icon="⛽",
@@ -34,6 +49,12 @@ st.set_page_config(
 
 st.title("⛽ Fuel Up Plan")
 st.markdown("Plan your next fuel stop easily.")
+_ar = _auto_refresh_interval()
+if _ar is not None and getattr(st, "fragment", None):
+    st.caption(
+        f"While this tab stays open, **prices and charts** re-query the database about every **{int(_ar.total_seconds())}s**. "
+        "Set `STREAMLIT_AUTO_REFRESH_SECONDS=0` to disable."
+    )
 
 
 @st.cache_resource(ttl=300)
@@ -207,203 +228,220 @@ fuel_types = {
     "LPG": "LPG"
 }
 
-# --- SPLIT LAYOUT ---
-# Left side for the Map (1.4 ratio), Right side for the Plan (1.0 ratio)
-map_col, plan_col = st.columns([1.4, 1.0], gap="large")
 
-# We create an empty placeholder for the map in the left column.
-# This allows us to calculate the results in the right column first,
-# and then draw the single map in the left column afterwards!
-map_placeholder = map_col.empty()
+def _render_fuel_plan_dashboard() -> None:
+    # --- SPLIT LAYOUT ---
+    # Left side for the Map (1.4 ratio), Right side for the Plan (1.0 ratio)
+    map_col, plan_col = st.columns([1.4, 1.0], gap="large")
 
-with plan_col:
-    st.subheader("1. What do you need?")
-    selected_fuel_label = st.selectbox("I want petrol:", list(fuel_types.keys()))
-    selected_fuel = fuel_types[selected_fuel_label]
+    # We create an empty placeholder for the map in the left column.
+    # This allows us to calculate the results in the right column first,
+    # and then draw the single map in the left column afterwards!
+    map_placeholder = map_col.empty()
 
-    st.subheader("2. Where are you?")
+    with plan_col:
+        st.subheader("1. What do you need?")
+        selected_fuel_label = st.selectbox("I want petrol:", list(fuel_types.keys()))
+        selected_fuel = fuel_types[selected_fuel_label]
+
+        st.subheader("2. Where are you?")
     
-    viewer_ip = _viewer_ip_for_geo()
-    # Approximate location from viewer IP when Streamlit exposes it; else Melbourne (Vic default).
-    default_coords = get_ip_location(viewer_ip)
+        viewer_ip = _viewer_ip_for_geo()
+        # Approximate location from viewer IP when Streamlit exposes it; else Melbourne (Vic default).
+        default_coords = get_ip_location(viewer_ip)
     
-    loc_col1, loc_col2 = st.columns([1, 1])
-    with loc_col1:
-        st.markdown("**My location:**")
-        # streamlit_geolocation watches GPS continuously → reruns every update → screen flashing.
-        # Only mount the component when the user opts in.
-        use_live_gps = st.checkbox(
-            "Use device GPS",
-            value=False,
-            help="Uses browser location. Can refresh often; use manual address to avoid.",
-        )
-        loc = streamlit_geolocation() if use_live_gps else None
-    with loc_col2:
-        st.markdown("**Or type manually:**")
-        current_location = st.text_input("Place or postcode (e.g. '3121'):")
-
-    st.subheader("3. Choose your plan")
-    tab1, tab2, tab3 = st.tabs(["Cheapest Price", "Closest Station", "Best Value (Price + Distance)"])
-
-    coords = None
-    location_display = ""
-    user_address = "You are here"
-
-    # Determine coords based on user input, exact GPS, or IP auto-detect
-    if current_location:
-        coords, resolved_addr = get_coordinates(current_location)
-        if coords:
-            location_display = current_location
-            user_address = resolved_addr
-    elif loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
-        coords = (loc["latitude"], loc["longitude"])
-        location_display = "Your Exact GPS Location"
-        user_address = get_address_from_coords(coords[0], coords[1])
-    else:
-        coords = default_coords
-        location_display = "Your Approximate Location (Auto)"
-        user_address = get_address_from_coords(coords[0], coords[1])
-        if viewer_ip is None:
-            st.caption(
-                "No viewer IP from this session — map centres on **Melbourne**. "
-                "Type a suburb or postcode for Victoria."
+        loc_col1, loc_col2 = st.columns([1, 1])
+        with loc_col1:
+            st.markdown("**My location:**")
+            # streamlit_geolocation watches GPS continuously → reruns every update → screen flashing.
+            # Only mount the component when the user opts in.
+            use_live_gps = st.checkbox(
+                "Use device GPS",
+                value=False,
+                help="Uses browser location. Can refresh often; use manual address to avoid.",
             )
+            loc = streamlit_geolocation() if use_live_gps else None
+        with loc_col2:
+            st.markdown("**Or type manually:**")
+            current_location = st.text_input("Place or postcode (e.g. '3121'):")
 
-    # Fetch and filter data
-    df_nearby = pd.DataFrame()
-    cheapest_df = pd.DataFrame()
-    closest_df = pd.DataFrame()
-    best_value_df = pd.DataFrame()
+        st.subheader("3. Choose your plan")
+        tab1, tab2, tab3 = st.tabs(["Cheapest Price", "Closest Station", "Best Value (Price + Distance)"])
 
-    if coords:
-        # st.success(f"📍 Location found: **{user_address}**")  # Removed per request
-        df = fetch_hybrid_prices(selected_fuel)
-        
-        if not df.empty:
-            def calc_distance(row):
-                station_coords = (row['latitude'], row['longitude'])
-                return geodesic(coords, station_coords).km
-                
-            df['distance_km'] = df.apply(calc_distance, axis=1)
-            df_nearby = df[df['distance_km'] <= 10].copy()
+        coords = None
+        location_display = ""
+        user_address = "You are here"
 
-            if not df_nearby.empty:
-                cheapest_df = df_nearby.sort_values(by=['price', 'distance_km']).head(5)
-                closest_df = df_nearby.sort_values(by=['distance_km']).head(5)
-                
-                # Calculate "Best Value" score:
-                # Every extra KM driven costs fuel. Assuming average car burns 8L/100km, 
-                # that's 0.08L per km. If fuel is ~200 cents/L, 1km = ~16 cents of burned fuel.
-                # So the "True Cost" per litre is roughly the raw price + (16 cents * (distance / 50L tank))
-                # For simplicity, we just add a penalty factor to the price based on distance.
-                # Penalty = distance_km * 0.5 (adds 0.5 cents to the "effective price" for every km driven)
-                df_nearby['value_score'] = df_nearby['price'] + (df_nearby['distance_km'] * 0.5)
-                best_value_df = df_nearby.sort_values(by=['value_score']).head(5)
-                
-                def render_station_card(row):
-                    # Attempt to find a logo based on the brand/name
-                    name_lower = str(row['station_name']).lower()
-                    if 'ampol' in name_lower or 'eg ampol' in name_lower:
-                        logo = "🔴" # Ampol red
-                    elif 'bp' in name_lower:
-                        logo = "🟢" # BP green
-                    elif 'shell' in name_lower:
-                        logo = "🟡" # Shell yellow
-                    elif 'coles' in name_lower or 'shell coles' in name_lower:
-                        logo = "🔴" # Coles Express red
-                    elif 'united' in name_lower:
-                        logo = "🔵" # United blue
-                    elif '7-eleven' in name_lower:
-                        logo = "🟠" # 7-Eleven orange/green
-                    elif 'liberty' in name_lower:
-                        logo = "🔷" # Liberty blue
-                    else:
-                        logo = "⛽" # Default
-                        
-                    st.markdown(f"""
-                        <div style="padding: 10px; border-radius: 5px; border: 1px solid #e0e0e0; margin-bottom: 10px;">
-                            <h4 style="margin-top: 0; margin-bottom: 5px;">{logo} {row['station_name']}</h4>
-                            <div style="display: flex; align-items: baseline; gap: 10px;">
-                                <h3 style="color: #2e7d32; margin: 0;">{row['price']} ¢/L</h3>
-                                <span style="color: #666; font-size: 0.9em;">📍 {row['distance_km']:.1f} km</span>
-                            </div>
-                            <div style="color: #888; font-size: 0.8em; margin-top: 5px;">{row['address']}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                
-                with tab1:
-                    st.markdown("**Top 5 Cheapest Options (Within 10km)**")
-                    for index, row in cheapest_df.iterrows():
-                        render_station_card(row)
-                        
-                with tab2:
-                    st.markdown("**Top 5 Closest Stations**")
-                    for index, row in closest_df.iterrows():
-                        render_station_card(row)
-                        
-                with tab3:
-                    st.markdown("**Top 5 Best Value (Price + Driving Distance factor)**")
-                    st.info("💡 Takes into account that driving further burns more fuel. Stations further away get a slight price penalty.")
-                    for index, row in best_value_df.iterrows():
-                        render_station_card(row)
-            else:
-                st.warning("No stations found nearby with that fuel type.")
+        # Determine coords based on user input, exact GPS, or IP auto-detect
+        if current_location:
+            coords, resolved_addr = get_coordinates(current_location)
+            if coords:
+                location_display = current_location
+                user_address = resolved_addr
+        elif loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
+            coords = (loc["latitude"], loc["longitude"])
+            location_display = "Your Exact GPS Location"
+            user_address = get_address_from_coords(coords[0], coords[1])
         else:
-            st.warning("No fuel data available. Please check the database.")
-
-# --- RENDER SINGLE MAP ON LEFT SIDE ---
-with map_placeholder.container():
-    if coords:
-        # Combine the cheapest, closest, and best value stations into one list so they all appear on the single map
-        display_df = pd.concat([cheapest_df, closest_df, best_value_df]).drop_duplicates(subset=['station_name'])
-        
-        from folium import plugins
-        m = leafmap.Map(center=coords, zoom=13, draw_control=False, measure_control=False)
-        
-        # Add Search Control
-        plugins.Geocoder().add_to(m)
-        
-        # Add User Location Pin
-        m.add_marker(location=coords, tooltip="Your Location", popup=f"<b>Your Location:</b><br>{user_address}", icon=leafmap.folium.Icon(color="red", icon="info-sign"))
-        
-        # Add Gas Station Pins
-        for idx, row in display_df.iterrows():
-            station_coords = (row['latitude'], row['longitude'])
-            popup_html = f"<b>{row['station_name']}</b><br>Price: {row['price']} ¢/L<br>Dist: {row['distance_km']:.1f} km<br>{row['address']}"
-            m.add_marker(location=station_coords, popup=popup_html, tooltip=row['station_name'], icon=leafmap.folium.Icon(color="green", icon="gas-pump", prefix="fa"))
-        
-        # returned_objects=[] avoids a rerun on every pan/zoom/click (reduces flashing).
-        st_folium(m, height=500, width=None, returned_objects=[], key="fuel_plan_map")
-        
-        st.markdown("---")
-        st.subheader("📊 State-wide Fuel Trends")
-        
-        trend_col1, trend_col2 = st.columns([1, 1.5])
-        
-        with trend_col1:
-            st.markdown("**Today's Average Prices**")
-            avg_df = fetch_current_day_averages()
-            if not avg_df.empty:
-                avg_df['avg_price'] = avg_df['avg_price'].round(1)
-                st.dataframe(
-                    avg_df.rename(columns={'fuel_type': 'Fuel Type', 'avg_price': 'Average ¢/L'}),
-                    hide_index=True,
-                    width="stretch",
+            coords = default_coords
+            location_display = "Your Approximate Location (Auto)"
+            user_address = get_address_from_coords(coords[0], coords[1])
+            if viewer_ip is None:
+                st.caption(
+                    "No viewer IP from this session — map centres on **Melbourne**. "
+                    "Type a suburb or postcode for Victoria."
                 )
-            else:
-                st.info("No average data available.")
-                
-        with trend_col2:
-            st.markdown("**7-Day Price History**")
-            st.caption(
-                "By **ingest day** (Melbourne time)—same idea as Data Analysis—not the API’s per-station `updated_at`."
-            )
-            hist_df = fetch_7_day_price_history()
-            if not hist_df.empty:
-                chart_data = hist_df.pivot(index='date', columns='fuel_type', values='avg_price')
-                st.line_chart(chart_data)
-            else:
-                st.info("Historical data is building up. Check back tomorrow!")
-    else:
-        st.info("Map will appear here once location is determined.")
 
+        # Fetch and filter data
+        df_nearby = pd.DataFrame()
+        cheapest_df = pd.DataFrame()
+        closest_df = pd.DataFrame()
+        best_value_df = pd.DataFrame()
+
+        if coords:
+            # st.success(f"📍 Location found: **{user_address}**")  # Removed per request
+            df = fetch_hybrid_prices(selected_fuel)
+        
+            if not df.empty:
+                def calc_distance(row):
+                    station_coords = (row['latitude'], row['longitude'])
+                    return geodesic(coords, station_coords).km
+                
+                df['distance_km'] = df.apply(calc_distance, axis=1)
+                df_nearby = df[df['distance_km'] <= 10].copy()
+
+                if not df_nearby.empty:
+                    cheapest_df = df_nearby.sort_values(by=['price', 'distance_km']).head(5)
+                    closest_df = df_nearby.sort_values(by=['distance_km']).head(5)
+                
+                    # Calculate "Best Value" score:
+                    # Every extra KM driven costs fuel. Assuming average car burns 8L/100km, 
+                    # that's 0.08L per km. If fuel is ~200 cents/L, 1km = ~16 cents of burned fuel.
+                    # So the "True Cost" per litre is roughly the raw price + (16 cents * (distance / 50L tank))
+                    # For simplicity, we just add a penalty factor to the price based on distance.
+                    # Penalty = distance_km * 0.5 (adds 0.5 cents to the "effective price" for every km driven)
+                    df_nearby['value_score'] = df_nearby['price'] + (df_nearby['distance_km'] * 0.5)
+                    best_value_df = df_nearby.sort_values(by=['value_score']).head(5)
+                
+                    def render_station_card(row):
+                        # Attempt to find a logo based on the brand/name
+                        name_lower = str(row['station_name']).lower()
+                        if 'ampol' in name_lower or 'eg ampol' in name_lower:
+                            logo = "🔴" # Ampol red
+                        elif 'bp' in name_lower:
+                            logo = "🟢" # BP green
+                        elif 'shell' in name_lower:
+                            logo = "🟡" # Shell yellow
+                        elif 'coles' in name_lower or 'shell coles' in name_lower:
+                            logo = "🔴" # Coles Express red
+                        elif 'united' in name_lower:
+                            logo = "🔵" # United blue
+                        elif '7-eleven' in name_lower:
+                            logo = "🟠" # 7-Eleven orange/green
+                        elif 'liberty' in name_lower:
+                            logo = "🔷" # Liberty blue
+                        else:
+                            logo = "⛽" # Default
+                        
+                        st.markdown(f"""
+                            <div style="padding: 10px; border-radius: 5px; border: 1px solid #e0e0e0; margin-bottom: 10px;">
+                                <h4 style="margin-top: 0; margin-bottom: 5px;">{logo} {row['station_name']}</h4>
+                                <div style="display: flex; align-items: baseline; gap: 10px;">
+                                    <h3 style="color: #2e7d32; margin: 0;">{row['price']} ¢/L</h3>
+                                    <span style="color: #666; font-size: 0.9em;">📍 {row['distance_km']:.1f} km</span>
+                                </div>
+                                <div style="color: #888; font-size: 0.8em; margin-top: 5px;">{row['address']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                
+                    with tab1:
+                        st.markdown("**Top 5 Cheapest Options (Within 10km)**")
+                        for index, row in cheapest_df.iterrows():
+                            render_station_card(row)
+                        
+                    with tab2:
+                        st.markdown("**Top 5 Closest Stations**")
+                        for index, row in closest_df.iterrows():
+                            render_station_card(row)
+                        
+                    with tab3:
+                        st.markdown("**Top 5 Best Value (Price + Driving Distance factor)**")
+                        st.info("💡 Takes into account that driving further burns more fuel. Stations further away get a slight price penalty.")
+                        for index, row in best_value_df.iterrows():
+                            render_station_card(row)
+                else:
+                    st.warning("No stations found nearby with that fuel type.")
+            else:
+                st.warning("No fuel data available. Please check the database.")
+
+    # --- RENDER SINGLE MAP ON LEFT SIDE ---
+    with map_placeholder.container():
+        if coords:
+            # Combine the cheapest, closest, and best value stations into one list so they all appear on the single map
+            display_df = pd.concat([cheapest_df, closest_df, best_value_df]).drop_duplicates(subset=['station_name'])
+        
+            from folium import plugins
+            m = leafmap.Map(center=coords, zoom=13, draw_control=False, measure_control=False)
+        
+            # Add Search Control
+            plugins.Geocoder().add_to(m)
+        
+            # Add User Location Pin
+            m.add_marker(location=coords, tooltip="Your Location", popup=f"<b>Your Location:</b><br>{user_address}", icon=leafmap.folium.Icon(color="red", icon="info-sign"))
+        
+            # Add Gas Station Pins
+            for idx, row in display_df.iterrows():
+                station_coords = (row['latitude'], row['longitude'])
+                popup_html = f"<b>{row['station_name']}</b><br>Price: {row['price']} ¢/L<br>Dist: {row['distance_km']:.1f} km<br>{row['address']}"
+                m.add_marker(location=station_coords, popup=popup_html, tooltip=row['station_name'], icon=leafmap.folium.Icon(color="green", icon="gas-pump", prefix="fa"))
+        
+            # returned_objects=[] avoids a rerun on every pan/zoom/click (reduces flashing).
+            st_folium(m, height=500, width=None, returned_objects=[], key="fuel_plan_map")
+        
+            st.markdown("---")
+            st.subheader("📊 State-wide Fuel Trends")
+        
+            trend_col1, trend_col2 = st.columns([1, 1.5])
+        
+            with trend_col1:
+                st.markdown("**Today's Average Prices**")
+                avg_df = fetch_current_day_averages()
+                if not avg_df.empty:
+                    avg_df['avg_price'] = avg_df['avg_price'].round(1)
+                    st.dataframe(
+                        avg_df.rename(columns={'fuel_type': 'Fuel Type', 'avg_price': 'Average ¢/L'}),
+                        hide_index=True,
+                        width="stretch",
+                    )
+                else:
+                    st.info("No average data available.")
+                
+            with trend_col2:
+                st.markdown("**7-Day Price History**")
+                st.caption(
+                    "By **ingest day** (Melbourne time)—same idea as Data Analysis—not the API’s per-station `updated_at`."
+                )
+                hist_df = fetch_7_day_price_history()
+                if not hist_df.empty:
+                    chart_data = hist_df.pivot(index='date', columns='fuel_type', values='avg_price')
+                    st.line_chart(chart_data)
+                    latest_ingest_day = pd.to_datetime(hist_df["date"]).max().date()
+                    today_melb = melbourne_today()
+                    if latest_ingest_day < today_melb:
+                        st.info(
+                            f"Latest **official ingest day** in this chart is **{latest_ingest_day.isoformat()}** "
+                            f"(Melbourne), before today (**{today_melb.isoformat()}**). "
+                            "The line will extend when your ingestion job writes new `raw_prices` rows."
+                        )
+                else:
+                    st.info("Historical data is building up. Check back tomorrow!")
+        else:
+            st.info("Map will appear here once location is determined.")
+
+
+_refresh = _auto_refresh_interval()
+_frag = getattr(st, "fragment", None)
+if _refresh is not None and _frag is not None:
+    _frag(run_every=_refresh)(_render_fuel_plan_dashboard)()
+else:
+    _render_fuel_plan_dashboard()

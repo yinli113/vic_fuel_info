@@ -98,7 +98,7 @@ if not _health:
 _health.close()
 
 max_ingest_s = cached_max_ingest()
-default_end = date.fromisoformat(max_ingest_s) if max_ingest_s else date.today()
+default_end = date.fromisoformat(max_ingest_s) if max_ingest_s else analysis.melbourne_today()
 
 with st.sidebar:
     st.subheader("Filters")
@@ -107,8 +107,20 @@ with st.sidebar:
     as_of_date = st.date_input(
         "As-of date (ingest day)",
         value=default_end,
-        max_value=date.today(),
+        max_value=analysis.melbourne_today(),
     )
+    max_ingest_d = date.fromisoformat(max_ingest_s) if max_ingest_s else None
+    if max_ingest_d:
+        st.caption(
+            f"Latest **official** snapshot day in the database: **{max_ingest_d.isoformat()}** "
+            "(Melbourne calendar day of `ingested_at`)."
+        )
+        if as_of_date > max_ingest_d:
+            st.warning(
+                f"You chose **{as_of_date.isoformat()}**, after the last ingest (**{max_ingest_d.isoformat()}**). "
+                "Figures do not get fresher until ingestion inserts new rows. "
+                "Run your GitHub Action or `run_ingest.py` to move this date forward."
+            )
     map_mode = st.radio(
         "Map layer",
         ("Price intensity", "Unavailable / outage"),

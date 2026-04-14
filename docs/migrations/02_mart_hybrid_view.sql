@@ -1,12 +1,5 @@
--- Mart: prefer latest ingest for official rows; tie-break official vs community by ingest/report time.
---
--- If Supabase SQL Editor times out, run in order (each file = one Run):
---   1) 01_indexes_for_mart_view.sql
---   2) 02_mart_hybrid_view.sql
---
--- Or use psql / Supabase CLI against the DB (often no same web timeout).
---
--- Single-shot (after indexes exist, or on small DBs):
+-- Run SECOND (after 01_indexes… succeeds).
+-- Extends session timeout where the role allows it (Supabase may still cap the editor).
 SET statement_timeout = '15min';
 
 CREATE OR REPLACE VIEW mart_hybrid_current_prices AS

@@ -5,7 +5,8 @@ Queries for the Data Analysis page: official raw_prices snapshots by ingest date
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -25,6 +26,11 @@ from data_access.streamlit_env import (
 load_dotenv()
 
 AU_TZ = "Australia/Melbourne"
+
+
+def melbourne_today() -> date:
+    """Calendar date in Melbourne (matches how we bucket `ingested_at` in SQL)."""
+    return datetime.now(ZoneInfo(AU_TZ)).date()
 
 
 def get_db_connection():
