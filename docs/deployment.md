@@ -42,7 +42,7 @@ So the **“official ingest day”** in charts is the latest **`ingested_at`** i
 
 - **Schema**: Run `python setup_db.py` (or your migration SQL) against the **same** hosted database once.
 - **Ingestion secrets**: In the repo → **Settings → Secrets and variables → Actions**, set `SERVO_SAVER_API_CONSUMER_ID` and **either** `POSTGRES_DB_URL` **or** the discrete `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` (same names as Streamlit). If Actions has no valid DB env, ingestion never writes and ingest days stay old.
-- **Check it ran**: **Actions** tab → latest **Scheduled Fuel Data Ingestion** run → green and logs show inserted rows (not “Skipping ingestion”).
+- **Check it really wrote data**: **Actions** tab → open the job log. You should see `Inserted N price records` and `latest Melbourne ingest calendar day = YYYY-MM-DD`. If the workflow was green before but those lines never appeared, the script used to **exit 0 on failure** (fixed in `run_ingest.py`); upgrade `main` and re-run the workflow—failures should now show **red** with a non-zero exit code.
 
 ## 4. Local vs Cloud
 

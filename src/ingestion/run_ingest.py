@@ -6,7 +6,6 @@ import logging
 import requests
 import psycopg2
 from psycopg2.extras import execute_values
-from datetime import datetime
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _SRC = os.path.join(_REPO_ROOT, "src")
@@ -75,15 +74,16 @@ def fetch_fuel_data():
             
     return None
 
-def process_and_save_data(data):
-    if not data or 'fuelPriceDetails' not in data:
-        logging.info("No data to process.")
-        return
-        
+def process_and_save_data(data) -> bool:
+    """Return True if new price rows were committed. False → caller should fail the job (e.g. GitHub Actions)."""
+    if not data or "fuelPriceDetails" not in data:
+        logging.error("API payload missing fuelPriceDetails — nothing to insert.")
+        return False
+
     stations = []
     prices = []
-    
-    for item in data['fuelPriceDetails']:
+
+    for item in data["fuelPriceDetails"]:
         station = item.get('fuelStation', {})
         station_id = station.get('id')
         
@@ -112,8 +112,12 @@ def process_and_save_data(data):
             ))
             
     if not stations:
-        logging.info("No valid stations found in data.")
-        return
+        logging.error("No valid stations in API payload — nothing to insert.")
+        return False
+
+    if not prices:
+        logging.error("No price rows in API payload — nothing to insert.")
+        return False
 
     # Database insertion
     try:
@@ -143,17 +147,38 @@ def process_and_save_data(data):
         """
         execute_values(cursor, price_query, prices)
         logging.info(f"Inserted {len(prices)} price records.")
-        
+
         conn.commit()
+        cursor.execute(
+            """
+            SELECT MAX((ingested_at AT TIME ZONE 'Australia/Melbourne')::date)
+            FROM raw_prices
+            """
+        )
+        max_ingest_day = cursor.fetchone()[0]
+        logging.info(
+            "After commit: raw_prices latest Melbourne ingest calendar day = %s (MAX ingested_at in Melbourne).",
+            max_ingest_day,
+        )
         cursor.close()
         conn.close()
         logging.info("Data successfully saved to database.")
+        return True
     except Exception as e:
-        logging.error(f"Database error: {e}")
+        logging.error("Database error: %s", e, exc_info=True)
+        return False
+
 
 if __name__ == "__main__":
     logging.info("Starting ingestion job...")
     data = fetch_fuel_data()
-    if data:
-        process_and_save_data(data)
-    logging.info("Ingestion job completed.")
+    if data is None:
+        logging.error(
+            "Ingestion aborted: API unreachable / bad response, or SERVO_SAVER_API_CONSUMER_ID missing. "
+            "Fix secrets and re-run; this exit code is non-zero so GitHub Actions does not show false green."
+        )
+        sys.exit(1)
+    if not process_and_save_data(data):
+        logging.error("Ingestion did not commit new price rows — see errors above.")
+        sys.exit(1)
+    logging.info("Ingestion job completed successfully.")
