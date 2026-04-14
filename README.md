@@ -58,7 +58,7 @@ Open the sidebar to switch to **Data Analysis** when `src/pages/` is present.
 3. **Secrets:** database variables (URL or discrete), optional API keys — [docs/deployment.md](docs/deployment.md).
 4. **Supabase session pooler** (IPv4-friendly) is recommended for Cloud; see deployment doc for the `db.*` vs `pooler.supabase.com` note.
 
-**GitHub Actions:** add repository secrets `POSTGRES_DB_URL` (or the same discrete vars your workflow exports) and `SERVO_SAVER_API_CONSUMER_ID` so scheduled ingest keeps the DB fresh.
+**GitHub Actions:** add repository secrets `POSTGRES_DB_URL` **or** discrete `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` (same as Streamlit), plus `SERVO_SAVER_API_CONSUMER_ID`. The app **does not** call the Vic API; only this workflow writes new official rows—see [docs/deployment.md](docs/deployment.md#3-database-and-ingestion).
 
 ## Environment variables
 

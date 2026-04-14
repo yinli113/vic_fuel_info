@@ -31,8 +31,18 @@ The app maps these into `os.environ` on startup (see `src/data_access/streamlit_
 
 ## 3. Database and ingestion
 
-- **Schema**: Run `python setup_db.py` (or your migration path) against the **same** hosted database once.
-- **Ingestion**: Keep [GitHub Actions](https://docs.github.com/en/actions) (e.g. `.github/workflows/ingest.yml`) pointed at that DB via repository **Secrets** (`POSTGRES_DB_URL`), so scheduled jobs refresh official data while the live app reads it.
+**Two separate things (easy to mix up):**
+
+| What | Calls Vic fuel API? | Writes `raw_prices`? |
+|------|---------------------|----------------------|
+| **Streamlit app** (Cloud) | **No** — it only **reads** Postgres | No |
+| **GitHub Action** [`.github/workflows/ingest.yml`](../.github/workflows/ingest.yml) | **Yes** (`run_ingest.py`) | **Yes** — each run sets `ingested_at` |
+
+So the **“official ingest day”** in charts is the latest **`ingested_at`** in your database. It moves forward only when the **Action succeeds** on a schedule (twice daily UTC in the workflow) or when you **Run workflow** manually. Refreshing the Streamlit page does not pull new official rows from the API.
+
+- **Schema**: Run `python setup_db.py` (or your migration SQL) against the **same** hosted database once.
+- **Ingestion secrets**: In the repo → **Settings → Secrets and variables → Actions**, set `SERVO_SAVER_API_CONSUMER_ID` and **either** `POSTGRES_DB_URL` **or** the discrete `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` (same names as Streamlit). If Actions has no valid DB env, ingestion never writes and ingest days stay old.
+- **Check it ran**: **Actions** tab → latest **Scheduled Fuel Data Ingestion** run → green and logs show inserted rows (not “Skipping ingestion”).
 
 ## 4. Local vs Cloud
 

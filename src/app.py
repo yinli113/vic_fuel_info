@@ -431,7 +431,9 @@ def _render_fuel_plan_dashboard() -> None:
                         st.info(
                             f"Latest **official ingest day** in this chart is **{latest_ingest_day.isoformat()}** "
                             f"(Melbourne), before today (**{today_melb.isoformat()}**). "
-                            "The line will extend when your ingestion job writes new `raw_prices` rows."
+                            "This page **only reads your database**; it does **not** call the government fuel API. "
+                            "New days appear after **GitHub Actions** runs `run_ingest.py` and inserts into `raw_prices` "
+                            "(repo → Actions → *Scheduled Fuel Data Ingestion*). Check that workflow is green and DB secrets match Streamlit."
                         )
                 else:
                     st.info("Historical data is building up. Check back tomorrow!")
