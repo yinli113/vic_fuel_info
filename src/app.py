@@ -150,6 +150,26 @@ def fetch_7_day_price_history():
     """
     try:
         df = pd.read_sql(query, conn)
+        # #region agent log
+        from data_access.debug_agent_log import agent_debug_log
+
+        _mx = _mn = None
+        if not df.empty and "date" in df.columns:
+            _ts = pd.to_datetime(df["date"])
+            _mx = str(_ts.max().date())
+            _mn = str(_ts.min().date())
+        agent_debug_log(
+            hypothesis_id="H-chart-vs-analysis",
+            location="app.py:fetch_7_day_price_history",
+            message="7d fuel chart query result",
+            data={
+                "row_count": int(len(df)),
+                "min_chart_day": _mn,
+                "max_chart_day": _mx,
+                "melbourne_today_py": melbourne_today().isoformat(),
+            },
+        )
+        # #endregion
         return df
     except Exception as e:
         return pd.DataFrame()

@@ -73,8 +73,35 @@ def fetch_max_ingest_date(conn) -> date | None:
     """
     df = pd.read_sql(q, conn)
     if df.empty or pd.isna(df.iloc[0]["d"]):
+        # #region agent log
+        try:
+            from data_access.debug_agent_log import agent_debug_log
+
+            agent_debug_log(
+                hypothesis_id="H-chart-vs-analysis",
+                location="analysis.py:fetch_max_ingest_date",
+                message="MAX melbourne ingest day from raw_prices",
+                data={"max_ingest_date": None},
+            )
+        except Exception:
+            pass
+        # #endregion
         return None
-    return df.iloc[0]["d"]
+    out = df.iloc[0]["d"]
+    # #region agent log
+    try:
+        from data_access.debug_agent_log import agent_debug_log
+
+        agent_debug_log(
+            hypothesis_id="H-chart-vs-analysis",
+            location="analysis.py:fetch_max_ingest_date",
+            message="MAX melbourne ingest day from raw_prices",
+            data={"max_ingest_date": out.isoformat() if hasattr(out, "isoformat") else str(out)},
+        )
+    except Exception:
+        pass
+    # #endregion
+    return out
 
 
 def fetch_state_trend_7d(conn, fuel_type: str, end_date: date) -> pd.DataFrame:
