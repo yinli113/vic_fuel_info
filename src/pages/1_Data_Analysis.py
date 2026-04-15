@@ -99,6 +99,11 @@ _health.close()
 
 max_ingest_s = cached_max_ingest()
 default_end = date.fromisoformat(max_ingest_s) if max_ingest_s else analysis.melbourne_today()
+max_ingest_d = date.fromisoformat(max_ingest_s) if max_ingest_s else None
+_today_melb = analysis.melbourne_today()
+# Cap picker at latest ingest so the UI cannot sit "on today" with stale official rows (matches Fuel Up chart reality).
+_asof_max = min(_today_melb, max_ingest_d) if max_ingest_d else _today_melb
+_asof_default = min(default_end, _asof_max)
 
 with st.sidebar:
     st.subheader("Filters")
@@ -106,21 +111,15 @@ with st.sidebar:
     fuel_code = FUEL_LABELS[fuel_label]
     as_of_date = st.date_input(
         "As-of date (ingest day)",
-        value=default_end,
-        max_value=analysis.melbourne_today(),
+        value=_asof_default,
+        max_value=_asof_max,
+        help="Only through the latest official snapshot in the database (same limit as the Fuel Up 7-day chart end).",
     )
-    max_ingest_d = date.fromisoformat(max_ingest_s) if max_ingest_s else None
     if max_ingest_d:
         st.caption(
             f"Latest **official** snapshot day in the database: **{max_ingest_d.isoformat()}** "
-            "(Melbourne calendar day of `ingested_at`)."
+            "(Melbourne calendar day of `ingested_at`). Newer calendar days appear after ingestion writes new rows."
         )
-        if as_of_date > max_ingest_d:
-            st.warning(
-                f"You chose **{as_of_date.isoformat()}**, after the last ingest (**{max_ingest_d.isoformat()}**). "
-                "Figures do not get fresher until ingestion inserts new rows. "
-                "Run your GitHub Action or `run_ingest.py` to move this date forward."
-            )
     map_mode = st.radio(
         "Map layer",
         ("Price intensity", "Unavailable / outage"),
