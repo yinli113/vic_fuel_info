@@ -43,6 +43,10 @@ So the **“official ingest day”** in charts is the latest **`ingested_at`** i
 - **Schema**: Run `python setup_db.py` (or your migration SQL) against the **same** hosted database once.
 - **Ingestion secrets**: In the repo → **Settings → Secrets and variables → Actions**, set `SERVO_SAVER_API_CONSUMER_ID` and **either** `POSTGRES_DB_URL` **or** the discrete `POSTGRES_HOST` / `POSTGRES_USER` / `POSTGRES_PASSWORD` (same names as Streamlit). If Actions has no valid DB env, ingestion never writes and ingest days stay old.
 - **Check it really wrote data**: **Actions** tab → open the job log. You should see `Inserted N price records` and `latest Melbourne ingest calendar day = YYYY-MM-DD`. If the workflow was green before but those lines never appeared, the script used to **exit 0 on failure** (fixed in `run_ingest.py`); upgrade `main` and re-run the workflow—failures should now show **red** with a non-zero exit code.
+- **If `MAX(ingested_at)` in Supabase never moves** after a green run: pull latest `main` (ingest now sets `ingested_at` explicitly in Python). In SQL Editor run:
+  - `SELECT MAX(id) AS newest_id, MAX(ingested_at) AS newest_ts, COUNT(*)::bigint AS n FROM raw_prices;`
+  - `SELECT id, ingested_at FROM raw_prices ORDER BY id DESC LIMIT 5;`  
+  If `newest_id` never grows, inserts are not landing in this database (wrong project, RLS, or workflow not on latest commit). If `newest_ts` grows but Melbourne **date** stays the same, you are likely still on one Melbourne calendar day across runs (rerun after local midnight Melbourne to confirm).
 
 ## 4. Local vs Cloud
 

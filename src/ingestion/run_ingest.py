@@ -5,6 +5,7 @@ import uuid
 import logging
 import requests
 import psycopg2
+from datetime import datetime, timezone
 from psycopg2.extras import execute_values
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -103,13 +104,15 @@ def process_and_save_data(data) -> bool:
         ))
         
         for fuel in item.get('fuelPrices', []):
-            prices.append((
-                station_id,
-                fuel.get('fuelType'),
-                fuel.get('price'),
-                fuel.get('isAvailable'),
-                fuel.get('updatedAt')
-            ))
+            prices.append(
+                (
+                    station_id,
+                    fuel.get('fuelType'),
+                    fuel.get('price'),
+                    fuel.get('isAvailable'),
+                    fuel.get('updatedAt'),
+                )
+            )
             
     if not stations:
         logging.error("No valid stations in API payload — nothing to insert.")
@@ -118,6 +121,11 @@ def process_and_save_data(data) -> bool:
     if not prices:
         logging.error("No price rows in API payload — nothing to insert.")
         return False
+
+    # One wall-clock time for this snapshot so MAX(ingested_at) always moves on successful runs
+    # (avoids relying on DB default alone if the instance ever misbehaves).
+    ingest_ts = datetime.now(timezone.utc)
+    rows_6 = [(*t, ingest_ts) for t in prices]
 
     # Database insertion
     try:
@@ -140,13 +148,14 @@ def process_and_save_data(data) -> bool:
         execute_values(cursor, station_query, stations)
         logging.info(f"Upserted {len(stations)} stations.")
         
-        # Insert Prices
+        # Insert Prices (explicit ingested_at so each run advances MAX(ingested_at))
         price_query = """
-            INSERT INTO raw_prices (station_id, fuel_type, price, is_available, updated_at)
+            INSERT INTO raw_prices (station_id, fuel_type, price, is_available, updated_at, ingested_at)
             VALUES %s
         """
-        execute_values(cursor, price_query, prices)
-        logging.info(f"Inserted {len(prices)} price records.")
+        logging.info("Batch ingested_at (UTC) for this run: %s", ingest_ts.isoformat())
+        execute_values(cursor, price_query, rows_6)
+        logging.info(f"Inserted {len(rows_6)} price records.")
 
         conn.commit()
         cursor.execute(
