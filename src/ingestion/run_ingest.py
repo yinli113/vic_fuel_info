@@ -131,7 +131,10 @@ def process_and_save_data(data) -> bool:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+        cursor.execute("SELECT current_database()")
+        (db_name,) = cursor.fetchone()
+        logging.info("PostgreSQL current_database() = %s (compare to Supabase SQL Editor → same name).", db_name)
+
         # Upsert Stations
         station_query = """
             INSERT INTO raw_stations (id, name, brand_id, address, latitude, longitude, contact_phone, updated_at)
