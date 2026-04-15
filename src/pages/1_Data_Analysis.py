@@ -67,7 +67,7 @@ def cached_snapshot(fuel_code: str, as_of_s: str) -> pd.DataFrame:
         conn.close()
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def cached_max_ingest() -> str | None:
     conn = analysis.get_db_connection()
     if not conn:
@@ -106,12 +106,14 @@ with st.sidebar:
     st.subheader("Filters")
     fuel_label = st.selectbox("Fuel type", list(FUEL_LABELS.keys()))
     fuel_code = FUEL_LABELS[fuel_label]
-    # Calendar can go up to Melbourne "today"; official rows still only exist through latest ingest (see caption + warning).
+    # Key includes latest ingest so when MAX(ingested_at) moves, Streamlit remounts the widget (otherwise session
+    # state keeps an old date forever while value= is ignored after first mount).
+    _as_of_key = f"da_as_of_{max_ingest_s or 'none'}"
     as_of_date = st.date_input(
         "As-of date (ingest day)",
         value=default_end,
         max_value=_today_melb,
-        key="da_as_of_picker",
+        key=_as_of_key,
         help="Maps and trends use rows with ingest day ≤ this date. Picking after the last ingest does not create new official data.",
     )
     if max_ingest_d:
