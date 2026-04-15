@@ -150,26 +150,6 @@ def fetch_7_day_price_history():
     """
     try:
         df = pd.read_sql(query, conn)
-        # #region agent log
-        from data_access.debug_agent_log import agent_debug_log
-
-        _mx = _mn = None
-        if not df.empty and "date" in df.columns:
-            _ts = pd.to_datetime(df["date"])
-            _mx = str(_ts.max().date())
-            _mn = str(_ts.min().date())
-        agent_debug_log(
-            hypothesis_id="H-chart-vs-analysis",
-            location="app.py:fetch_7_day_price_history",
-            message="7d fuel chart query result",
-            data={
-                "row_count": int(len(df)),
-                "min_chart_day": _mn,
-                "max_chart_day": _mx,
-                "melbourne_today_py": melbourne_today().isoformat(),
-            },
-        )
-        # #endregion
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -439,21 +419,24 @@ def _render_fuel_plan_dashboard() -> None:
             with trend_col2:
                 st.markdown("**7-Day Price History**")
                 st.caption(
-                    "By **ingest day** (Melbourne time)—same idea as Data Analysis—not the API’s per-station `updated_at`."
+                    "By **ingest day** (Melbourne time)—same `MAX(ingested_at)` calendar day as **Data Analysis’s default**, "
+                    "not the API’s per-station `updated_at`. The date picker there can go past this while still using the same official rows."
                 )
                 hist_df = fetch_7_day_price_history()
                 if not hist_df.empty:
+                    latest_ingest_day = pd.to_datetime(hist_df["date"]).max().date()
+                    st.caption(
+                        f"Latest **official** ingest day present in this chart’s data: **{latest_ingest_day.isoformat()}** (Melbourne)."
+                    )
                     chart_data = hist_df.pivot(index='date', columns='fuel_type', values='avg_price')
                     st.line_chart(chart_data)
-                    latest_ingest_day = pd.to_datetime(hist_df["date"]).max().date()
                     today_melb = melbourne_today()
                     if latest_ingest_day < today_melb:
                         st.info(
-                            f"Latest **official ingest day** in this chart is **{latest_ingest_day.isoformat()}** "
-                            f"(Melbourne), before today (**{today_melb.isoformat()}**). "
-                            "This page **only reads your database**; it does **not** call the government fuel API. "
-                            "New days appear after **GitHub Actions** runs `run_ingest.py` and inserts into `raw_prices` "
-                            "(repo → Actions → *Scheduled Fuel Data Ingestion*). Check that workflow is green and DB secrets match Streamlit."
+                            f"That day is **before** Melbourne today (**{today_melb.isoformat()}**). "
+                            "This page only **reads** Postgres; it does not call the Vic fuel API. "
+                            "New ingest days appear after **GitHub Actions** inserts into `raw_prices` "
+                            "(repo → Actions → *Scheduled Fuel Data Ingestion*). Align Streamlit and Actions DB secrets if runs are green but this date never moves."
                         )
                 else:
                     st.info("Historical data is building up. Check back tomorrow!")
