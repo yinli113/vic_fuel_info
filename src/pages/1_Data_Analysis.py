@@ -104,6 +104,10 @@ _today_melb = analysis.melbourne_today()
 # Cap picker at latest ingest so the UI cannot sit "on today" with stale official rows (matches Fuel Up chart reality).
 _asof_max = min(_today_melb, max_ingest_d) if max_ingest_d else _today_melb
 _asof_default = min(default_end, _asof_max)
+# Bust stale session-state dates from before the cap (value > max_value breaks the widget).
+_DA_AS_OF_KEY = "da_as_of_ingest_cap_v1"
+if _DA_AS_OF_KEY in st.session_state and st.session_state[_DA_AS_OF_KEY] > _asof_max:
+    del st.session_state[_DA_AS_OF_KEY]
 
 with st.sidebar:
     st.subheader("Filters")
@@ -113,6 +117,7 @@ with st.sidebar:
         "As-of date (ingest day)",
         value=_asof_default,
         max_value=_asof_max,
+        key=_DA_AS_OF_KEY,
         help="Only through the latest official snapshot in the database (same limit as the Fuel Up 7-day chart end).",
     )
     if max_ingest_d:
