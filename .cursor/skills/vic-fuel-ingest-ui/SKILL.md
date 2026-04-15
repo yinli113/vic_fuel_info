@@ -15,7 +15,7 @@ description: >-
 | Surface | What “date” means |
 |--------|-------------------|
 | **Fuel Up Plan → 7-day chart** | X-axis = **Melbourne calendar days that actually have rows** in `raw_prices` inside the last 7 days. If the last ingest was 10 Apr, the rightmost point is **10 Apr**. |
-| **Data Analysis → As-of date** | Calendar capped at **`min(today, latest official ingest day)`** so it cannot sit on a calendar day past real data (aligned with Fuel Up). Snapshots still use `ingested_at <= as_of`. |
+| **Data Analysis → As-of date** | Calendar runs through **Melbourne today**; captions + warning if you pick **after** latest ingest. Snapshots use `ingested_at <= as_of` (no new rows until ingestion). |
 
 So “Analysis date can be updated” often means **the picker moved**, not that **`MAX(ingested_at)` moved**.
 

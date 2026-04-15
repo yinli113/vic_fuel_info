@@ -101,30 +101,29 @@ max_ingest_s = cached_max_ingest()
 default_end = date.fromisoformat(max_ingest_s) if max_ingest_s else analysis.melbourne_today()
 max_ingest_d = date.fromisoformat(max_ingest_s) if max_ingest_s else None
 _today_melb = analysis.melbourne_today()
-# Cap picker at latest ingest so the UI cannot sit "on today" with stale official rows (matches Fuel Up chart reality).
-_asof_max = min(_today_melb, max_ingest_d) if max_ingest_d else _today_melb
-_asof_default = min(default_end, _asof_max)
-# Bust stale session-state dates from before the cap (value > max_value breaks the widget).
-_DA_AS_OF_KEY = "da_as_of_ingest_cap_v1"
-if _DA_AS_OF_KEY in st.session_state and st.session_state[_DA_AS_OF_KEY] > _asof_max:
-    del st.session_state[_DA_AS_OF_KEY]
 
 with st.sidebar:
     st.subheader("Filters")
     fuel_label = st.selectbox("Fuel type", list(FUEL_LABELS.keys()))
     fuel_code = FUEL_LABELS[fuel_label]
+    # Calendar can go up to Melbourne "today"; official rows still only exist through latest ingest (see caption + warning).
     as_of_date = st.date_input(
         "As-of date (ingest day)",
-        value=_asof_default,
-        max_value=_asof_max,
-        key=_DA_AS_OF_KEY,
-        help="Only through the latest official snapshot in the database (same limit as the Fuel Up 7-day chart end).",
+        value=default_end,
+        max_value=_today_melb,
+        key="da_as_of_picker",
+        help="Maps and trends use rows with ingest day ≤ this date. Picking after the last ingest does not create new official data.",
     )
     if max_ingest_d:
         st.caption(
             f"Latest **official** snapshot day in the database: **{max_ingest_d.isoformat()}** "
-            "(Melbourne calendar day of `ingested_at`). Newer calendar days appear after ingestion writes new rows."
+            "(Melbourne calendar day of `ingested_at`)."
         )
+        if as_of_date > max_ingest_d:
+            st.warning(
+                f"You selected **{as_of_date.isoformat()}**, after the last ingest (**{max_ingest_d.isoformat()}**). "
+                "Charts still use official rows through that last ingest only. Run GitHub Actions ingest to add newer days."
+            )
     map_mode = st.radio(
         "Map layer",
         ("Price intensity", "Unavailable / outage"),
