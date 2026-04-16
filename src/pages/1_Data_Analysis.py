@@ -326,8 +326,8 @@ with snap_brand_col:
             st.altair_chart(bchart, width="stretch")
             st.caption(
                 "Brands with fewer than two priced stations are hidden. "
-                "Labels are matched from station names (the API’s `brand_id` is opaque); "
-                "unmatched chains show as **Other (…suffix)**."
+                "Labels use known chains plus the shared part of station names where possible; "
+                "rare leftovers show a short **…suffix** id only."
             )
 
 st.divider()
