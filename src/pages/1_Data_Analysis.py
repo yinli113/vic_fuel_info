@@ -18,6 +18,7 @@ if str(_SRC) not in sys.path:
 
 from data_access import ai_report
 from data_access import analysis
+from data_access.brand_display import brand_display_column
 from data_access.streamlit_env import hydrate_secrets_into_environ
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -297,7 +298,7 @@ with snap_brand_col:
     if bdf.empty:
         st.caption("No priced, available stations for brand comparison.")
     else:
-        bdf["brand"] = bdf["brand_id"].fillna("(no brand)").astype(str)
+        bdf["brand"] = brand_display_column(bdf)
         brand_stats = (
             bdf.groupby("brand", as_index=False)
             .agg(mean_price=("price", "mean"), n=("price", "count"))
@@ -315,7 +316,7 @@ with snap_brand_col:
                     x=alt.X("mean_price:Q", title="Mean ¢/L"),
                     y=alt.Y("brand:N", sort=brand_order, title=None),
                     tooltip=[
-                        alt.Tooltip("brand:N", title="Brand id"),
+                        alt.Tooltip("brand:N", title="Brand"),
                         alt.Tooltip("mean_price:Q", title="Mean ¢/L", format=".1f"),
                         alt.Tooltip("n:Q", title="Stations"),
                     ],
@@ -323,7 +324,11 @@ with snap_brand_col:
                 .properties(height=min(420, max(160, 22 * int(len(brand_stats)))))
             )
             st.altair_chart(bchart, width="stretch")
-            st.caption("Brands with fewer than two priced stations are hidden.")
+            st.caption(
+                "Brands with fewer than two priced stations are hidden. "
+                "Labels are matched from station names (the API’s `brand_id` is opaque); "
+                "unmatched chains show as **Other (…suffix)**."
+            )
 
 st.divider()
 st.subheader("Seven-day trends")

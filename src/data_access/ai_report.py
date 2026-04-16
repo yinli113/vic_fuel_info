@@ -13,6 +13,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 
+from data_access.brand_display import brand_display_column
+
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 # 2.0 Flash is not offered to new API keys; 2.5 Flash is the current stable workhorse.
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
@@ -208,7 +210,7 @@ def build_dashboard_context(
     if not geo_snap.empty and "brand_id" in geo_snap.columns:
         bdf = geo_snap.loc[geo_snap["is_available"] & geo_snap["price"].notna()].copy()
         if not bdf.empty:
-            bdf["brand"] = bdf["brand_id"].fillna("(no brand)").astype(str)
+            bdf["brand"] = brand_display_column(bdf).astype(str)
             g = (
                 bdf.groupby("brand", as_index=False)
                 .agg(mean_price=("price", "mean"), n=("price", "count"))
@@ -219,7 +221,7 @@ def build_dashboard_context(
                 cheap = g.head(5)
                 ex = g.tail(5).iloc[::-1]
                 lines.append(
-                    "Brand mean c/L (min 2 stations; brand id only): "
+                    "Brand mean c/L (min 2 stations; inferred / mapped brand labels): "
                     "cheapest → "
                     + ", ".join(f"{r.brand}={r.mean_price:.1f} (n={int(r.n)})" for r in cheap.itertuples())
                 )

@@ -47,15 +47,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("⛽ Fuel Up Plan")
-st.markdown("Plan your next fuel stop easily.")
-_ar = _auto_refresh_interval()
-if _ar is not None and getattr(st, "fragment", None):
-    st.caption(
-        f"While this tab stays open, **prices and charts** re-query the database about every **{int(_ar.total_seconds())}s**. "
-        "Set `STREAMLIT_AUTO_REFRESH_SECONDS=0` to disable."
-    )
-
 
 @st.cache_resource(ttl=300)
 def _cached_psycopg2_conn(cache_key: str):
@@ -86,6 +77,82 @@ def _cached_psycopg2_conn(cache_key: str):
 def get_db_connection():
     hydrate_secrets_into_environ()
     return _cached_psycopg2_conn(postgres_connection_cache_key())
+
+
+@st.cache_data(ttl=300)
+def fetch_u91_official_ingest_trend():
+    """Last one or two Melbourne ingest calendar days: state mean U91 from `raw_prices` (matches 7-day chart logic)."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    q = """
+        WITH daily AS (
+            SELECT (ingested_at AT TIME ZONE 'Australia/Melbourne')::date AS d,
+                   AVG(price)::double precision AS avg_price
+            FROM raw_prices
+            WHERE fuel_type = 'U91'
+              AND (ingested_at AT TIME ZONE 'Australia/Melbourne')::date >=
+                  (CURRENT_TIMESTAMP AT TIME ZONE 'Australia/Melbourne')::date - INTERVAL '30 days'
+            GROUP BY 1
+        )
+        SELECT d, avg_price FROM daily ORDER BY d DESC LIMIT 2
+    """
+    try:
+        df = pd.read_sql(q, conn)
+    except Exception:
+        return None
+    if df.empty or pd.isna(df.iloc[0]["avg_price"]):
+        return None
+    df["d"] = pd.to_datetime(df["d"]).dt.date
+    latest_avg = float(df.iloc[0]["avg_price"])
+    latest_day = df.iloc[0]["d"]
+    out = {
+        "latest_day": latest_day,
+        "latest_avg": latest_avg,
+        "prev_day": None,
+        "prev_avg": None,
+        "delta": None,
+    }
+    if len(df) >= 2 and not pd.isna(df.iloc[1]["avg_price"]):
+        out["prev_day"] = df.iloc[1]["d"]
+        out["prev_avg"] = float(df.iloc[1]["avg_price"])
+        out["delta"] = latest_avg - out["prev_avg"]
+    return out
+
+
+_trend_banner = fetch_u91_official_ingest_trend()
+if _trend_banner:
+    if _trend_banner["delta"] is not None:
+        st.metric(
+            label="Latest trend — Unleaded 91 (state average, official ingest day)",
+            value=f"{_trend_banner['latest_avg']:.1f} ¢/L",
+            delta=f"{_trend_banner['delta']:+.1f} ¢/L vs previous ingest day in data",
+            delta_color="inverse",
+            help=(
+                "Melbourne calendar day from `ingested_at`, same basis as **7-Day Price History** below. "
+                f"**{_trend_banner['prev_day']}** → **{_trend_banner['latest_day']}**. "
+                "Green when the average moves down."
+            ),
+        )
+    else:
+        st.metric(
+            label="Latest trend — Unleaded 91 (state average, official ingest day)",
+            value=f"{_trend_banner['latest_avg']:.1f} ¢/L",
+            help=(
+                f"Latest ingest day in the database: **{_trend_banner['latest_day']}**. "
+                "Day-over-day change appears once a second ingest day is available in the window."
+            ),
+        )
+
+st.title("⛽ Fuel Up Plan")
+st.markdown("Plan your next fuel stop easily.")
+_ar = _auto_refresh_interval()
+if _ar is not None and getattr(st, "fragment", None):
+    st.caption(
+        f"While this tab stays open, **prices and charts** re-query the database about every **{int(_ar.total_seconds())}s**. "
+        "Set `STREAMLIT_AUTO_REFRESH_SECONDS=0` to disable."
+    )
+
 
 def fetch_hybrid_prices(fuel_type):
     conn = get_db_connection()
