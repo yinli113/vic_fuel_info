@@ -2,6 +2,8 @@
 
 **Vic Fuel Info** is a free, Streamlit-based app for Victorian drivers: compare **official** Servo Saver fuel prices with a **hybrid** Postgres backend, explore stations on a map, and dig into trends on a **Data Analysis** page (optional **Gemini / OpenAI** narrative). Deploy on [Streamlit Community Cloud](https://streamlit.io/cloud) + [Supabase](https://supabase.com/) (or any hosted Postgres). See [docs/deployment.md](docs/deployment.md).
 
+**Live app:** [vicfuelinfogit-kqcbbnr9qslyxdbmlivywd.streamlit.app](https://vicfuelinfogit-kqcbbnr9qslyxdbmlivywd.streamlit.app/)
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
