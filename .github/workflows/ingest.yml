@@ -1,13 +1,11 @@
+# Scheduled runs are paused. Re-add a `schedule:` block under `on:` to resume automatic ingestion.
 # DB: set EITHER POSTGRES_DB_URL OR all of POSTGRES_HOST + POSTGRES_USER + POSTGRES_PASSWORD in repo Secrets.
 # Code prefers discrete vars when all three are set; otherwise it uses POSTGRES_DB_URL. A leftover URL secret
 # pointing at another project while discrete vars are incomplete will send ingestion to the wrong database.
 name: Scheduled Fuel Data Ingestion
 
 on:
-  schedule:
-    # Twice daily (UTC). Official prices move slowly; adjust hours for Victoria-local preference.
-    - cron: '0 6,18 * * *'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch: # Manual runs only until schedule is re-enabled below
 
 jobs:
   ingest-data:
